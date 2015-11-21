@@ -16,8 +16,10 @@ get_best_play(_Play1 = {_, scissors}, Play2 = {_, rock}) -> Play2;
 get_best_play(_, _) -> undefined.
 
 check_result(Play1, Play2) ->
-	{BestPlayPlayer, BestPlayValue} = get_best_play(Play1, Play2),
-	{won, BestPlayPlayer, BestPlayValue}.		
+	case (get_best_play(Play1, Play2)) of
+		undefined -> {draw, Play1, Play2};
+		BestPlay -> {won, BestPlay}
+	end.
 
 %% Unit tests
 get_best_play_test() ->
@@ -28,8 +30,15 @@ get_best_play_test() ->
 	?assertEqual(get_best_play({player1, paper}, {player2, paper}), undefined),
 	?assertEqual(get_best_play({player1, scissors}, {player2, scissors}), undefined).	
 
-check_result_between_plays_test() ->
+check_result_between_different_plays_test() ->
 	Play1 = create_play(player1, paper),
 	Play2 = create_play(player2, rock),
 	Result = check_result(Play1, Play2),
-	?assertEqual(Result, {won, player1, paper}).
+	?assertEqual(Result, {won, Play1}).
+
+check_result_between_equal_plays_test() ->
+	Play1 = create_play(player1, scissors),
+	Play2 = create_play(player2, scissors),
+	Result = check_result(Play1, Play2),
+	?assertEqual(Result, {draw, Play1, Play2}).
+
