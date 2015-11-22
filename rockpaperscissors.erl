@@ -54,14 +54,10 @@ state_set_current_state(NewCurrentState, State) -> State#state{current_state = N
 state_get_current_state(State) -> State#state.current_state.
 
 %% @todo more granularity on this.
-state_update_current_state(State = #state{current_state=waiting_for_players, players=Players}) ->
-	case length(Players) of
-		1 -> state_set_current_state(need_more_players, State)
-	end;
-state_update_current_state(State = #state{current_state=need_more_players, players=Players}) ->
-	case length(Players) of
-		2 -> state_set_current_state(game_can_be_played, State)
-	end.
+state_update_current_state(State = #state{current_state=waiting_for_players, players=Players}) when length(Players) == 1 ->
+	state_set_current_state(need_more_players, State);
+state_update_current_state(State = #state{current_state=need_more_players, players=Players}) when length(Players) == 2 ->
+	state_set_current_state(game_can_be_played, State).
 
 may_join(NewPlayer, State=#state{}) ->
 	case can_join_player(State) of
