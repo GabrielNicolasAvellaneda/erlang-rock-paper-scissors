@@ -109,12 +109,70 @@ run() ->
 	io:format("Type help for the list of commands.~n"),
 	run(InitialState).
 
+can_parse(CommandLine, RE) ->
+	case parse(CommandLine, RE) of
+		{match, _} -> true;
+		_ -> false
+	end.
+
+parse(CommandLine, RE) -> re:run(CommandLine, RE, [{capture, all, list}]). 
+
+can_parse_state(CommandLine) ->
+	can_parse(CommandLine, "\h*state\h*").
+
+can_parse_help(CommandLine) ->
+	can_parse(CommandLine, "\h*help\h*").
+
+can_parse_join(CommandLine) ->
+	can_parse(CommandLine, "join").
+
+can_parse_play(CommandLine) ->
+	can_parse(CommandLine, "play").
+
+can_parse_new(CommandLine) ->
+	can_parse(CommandLine, "new").
+
+parse_join_params(CommandLine) ->
+	{match, Captures} = parse(CommandLine, "join ([a-z0-9]+)"),
+	tl(Captures).
+
+parse_play_params(CommandLine) ->
+	{match, Captures} = parse(CommandLine, "play ([a-z0-9]+) (rock|paper|scissors)"),
+	tl(Captures).
+
+%% @todo: Use a more functional aproach. Maybe map a list of regular expressions to the CommandLine
 parse_command(CommandLine) ->
-	{help, []}.
+	case can_parse_help(CommandLine) of
+		true -> {help, []};
+		false -> case can_parse_join(CommandLine) of
+				true -> {join, parse_join_params(CommandLine)};
+				 false -> case can_parse_play(CommandLine) of
+						 true -> {play, parse_play_params(CommandLine)};
+						  false -> case can_parse_new(CommandLine) of
+								  true -> {new, []};
+								  false -> case can_parse_state(CommandLine) of
+										   true -> {state, []};
+										   false -> undefined
+									   end
+							   end
+					  end
+			 end
+	end.
 
 run_command(help, _Params, State) ->
 	run_help_command(),
-	State.
+	State;
+run_command(join, [Player], State) ->
+	{ok, UpdatedState} = may_join(Player, State),
+	UpdatedState;
+run_command(play, [Player, PlayValue], State) ->
+	{ok, UpdatedState} = may_play(Player, PlayValue, State),
+	UpdatedState;
+run_command(state, _Params, State) ->
+	run_state_command(State),
+	State;
+run_command(new, [], _State) ->
+	new().	
 
 run_help_command() ->
 	io:format("Commands:~n"),
@@ -122,13 +180,20 @@ run_help_command() ->
 	io:format("        Example: join player_1~n~n"),
 	io:format("    play <user_id> <rock, paper or scissors>~n"),
 	io:format("        Example: play player_1 paper~n~n"),  
-	io:format("    new~n").
+	io:format("    new~n"),
+	io:format("    state~n").
+
+run_state_command(State) ->
+	io:format("~p~n", [State]).
 
 %% @doc A repl for controlling the game. 
 run(State) ->
 	Line = io:get_line("Rock Paper Scissor > "), 
-	{Command, Args} = parse_command(Line),
-	UpdatedState = run_command(Command, Args, State),
+	UpdatedState = case parse_command(Line) of
+		{Command, Args} -> run_command(Command, Args, State);
+		undefined -> io:format("Error: unrecognized command~n"),
+			     State
+	end,
 	run(UpdatedState).
 
 may_play(PlayerId, PlayValue, State=#state{}) ->
@@ -179,4 +244,10 @@ may_join_should_not_bet_allowed_test() ->
 	UpdatedState = state_set_players(Players, State),
 	NewPlayer = create_player(player_3),
 	?assertEqual(may_join(NewPlayer, UpdatedState), {join_is_not_allowed, UpdatedState}).
+
+parse_command_test() ->
+	HelpCommandLine = "   help   ",
+	?assertEqual({help, []}, parse_command(HelpCommandLine)),
+	JoinCommandLine = " join   player_1   ",
+	?assertEqual({join, ["player_1"]}, parse_command(JoinCommandLine)).
 
