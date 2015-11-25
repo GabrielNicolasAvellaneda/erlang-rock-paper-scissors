@@ -1,6 +1,6 @@
 -module(rockpaperscissors).
 -compile(export_all).
--export([new/0, may_join/2, may_play/3]).
+-export([run/0, new/0, may_join/2, may_play/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -103,6 +103,33 @@ may_join(NewPlayer, State=#state{}) ->
 
 		false -> {join_is_not_allowed, State}
 	end.
+
+run() ->
+	InitialState = new(),
+	io:format("Type help for the list of commands.~n"),
+	run(InitialState).
+
+parse_command(CommandLine) ->
+	{help, []}.
+
+run_command(help, _Params, State) ->
+	run_help_command(),
+	State.
+
+run_help_command() ->
+	io:format("Commands:~n"),
+	io:format("    join <user_id>~n"),
+	io:format("        Example: join player_1~n~n"),
+	io:format("    play <user_id> <rock, paper or scissors>~n"),
+	io:format("        Example: play player_1 paper~n~n"),  
+	io:format("    new~n").
+
+%% @doc A repl for controlling the game. 
+run(State) ->
+	Line = io:get_line("Rock Paper Scissor > "), 
+	{Command, Args} = parse_command(Line),
+	UpdatedState = run_command(Command, Args, State),
+	run(UpdatedState).
 
 may_play(PlayerId, PlayValue, State=#state{}) ->
 	case can_play(PlayerId, State) of
