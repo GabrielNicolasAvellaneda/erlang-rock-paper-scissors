@@ -1,6 +1,6 @@
 -module(rockpaperscissor).
 -compile(export_all).
--export([get_best_play/2, run/0, new/0, may_join/2, may_play/3]).
+-export([run/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -127,7 +127,7 @@ can_parse_join(CommandLine) ->
 	can_parse(CommandLine, "join").
 
 can_parse_play(CommandLine) ->
-	can_parse(CommandLine, "play").
+	can_parse(CommandLine, play_regex()).
 
 can_parse_new(CommandLine) ->
 	can_parse(CommandLine, "new").
@@ -136,8 +136,11 @@ parse_join_params(CommandLine) ->
 	{match, Captures} = parse(CommandLine, "join ([a-z0-9]+)"),
 	tl(Captures).
 
+play_regex() ->
+	"play ([a-z0-9]+) (rock|paper|scissor)".
+
 parse_play_params(CommandLine) ->
-	{match, Captures} = parse(CommandLine, "play ([a-z0-9]+) (rock|paper|scissor)"),
+	{match, Captures} = parse(CommandLine, play_regex()),
 	tl(Captures).
 
 %% @todo: Use a more functional aproach. Maybe map a list of regular expressions to the CommandLine
@@ -163,16 +166,31 @@ run_command(help, _Params, State) ->
 	run_help_command(),
 	State;
 run_command(join, [Player], State) ->
-	{ok, UpdatedState} = may_join(Player, State),
-	UpdatedState;
+	case may_join(Player, State) of
+		{ok, UpdatedState} -> 
+			io:format("** Player ~s joined the game. ~s **~n", [Player, format_current_state(state_get_current_state(UpdatedState))]),	
+			UpdatedState;
+		{join_is_not_allowed, State} ->
+			io:format("** Error: Can not join player ~s **~n", [Player]),
+			State
+	end;
+
 run_command(play, [Player, PlayValue], State) ->
-	{ok, UpdatedState} = may_play(Player, list_to_atom(PlayValue), State),
-	UpdatedState;
+	case may_play(Player, list_to_atom(PlayValue), State) of
+		{ok, UpdatedState} ->
+			io:format("** Player ~s played ~s. ~s **~n", [Player, PlayValue, format_current_state(state_get_current_state(UpdatedState))]),
+			UpdatedState;
+		{play_is_not_allowed, State} ->
+			io:format("** Error: Can not play right now **~n"),
+			State
+	end;
 run_command(state, _Params, State) ->
 	run_state_command(State),
 	State;
 run_command(new, [], _State) ->
-	new().	
+	NewState = new(),
+	io:format("** Starting a new game. ~s **~n", [format_current_state(state_get_current_state(NewState))]),
+	NewState.
 
 run_help_command() ->
 	io:format("Commands:~n"),
@@ -186,12 +204,25 @@ run_help_command() ->
 run_state_command(State) ->
 	io:format("~p~n", [State]).
 
+format_current_state(waiting_for_players) ->
+	"Waiting for players to join.";
+format_current_state(need_more_players) ->
+	"Need one more player to join this game.";
+format_current_state(game_can_be_played) ->
+	"Game can now be started.";
+format_current_state(game_started) ->
+	"Game has been started.";
+format_current_state({game_over, {won, {PlayerId, PlayValue}}}) ->
+	io_lib:format("Game over. Player ~s won the game with ~s!.", [PlayerId, PlayValue]);
+format_current_state({game_over, {draw, {Player1, PlayValue1}, {Player2, _PlayValue2}}}) ->
+	io_lib:format("Game over. Draw between ~s and ~s, both played ~s~n", [Player1, Player2, PlayValue1]).
+
 %% @doc A repl for controlling the game. 
 run(State) ->
 	Line = io:get_line("Rock Paper Scissor > "), 
 	UpdatedState = case parse_command(Line) of
 		{Command, Args} -> run_command(Command, Args, State);
-		undefined -> io:format("Error: unrecognized command~n"),
+		undefined -> io:format("** Error: unrecognized command. **~n"),
 			     State
 	end,
 	run(UpdatedState).
@@ -203,7 +234,7 @@ may_play(PlayerId, PlayValue, State=#state{}) ->
 			FinalState = state_update_current_state(UpdatedState),
 			{ok, FinalState};
 
-		false -> {play_is_not_allowed, State} %% This can be player_already_played, or action_not_alloed.
+		false -> {play_is_not_allowed, State} %% @todo This can be player_already_played, or action_not_alloed.
 	end.
 
 %% Unit tests
