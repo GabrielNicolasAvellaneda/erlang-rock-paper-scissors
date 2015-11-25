@@ -53,12 +53,16 @@ is_on_game_can_be_played(CurrentState) ->
 is_on_game_started(CurrentState) ->
 	CurrentState =:= game_started.
 
-can_join_player(#state{current_state = CurrentState, players = Players}) ->
-	(not is_players_limit_reached(Players)) andalso (is_on_waiting_for_players(CurrentState) orelse is_on_need_more_players(CurrentState)).
+can_join_player(PlayerId, State = #state{current_state = CurrentState, players = Players}) ->
+	(not player_exists(PlayerId, State)) andalso (not is_players_limit_reached(Players)) andalso (is_on_waiting_for_players(CurrentState) orelse is_on_need_more_players(CurrentState)).
 
 has_player_played(PlayerId, State) ->
 	Plays = state_get_plays(State),
 	lists:keymember(PlayerId, 1, Plays).
+
+player_exists(PlayerId, State) ->
+	Players = state_get_players(State),
+	lists:member(PlayerId, Players).
 
 can_play(PlayerId, State = #state{current_state = CurrentState}) ->
 	(not has_player_played(PlayerId, State)) andalso (is_on_game_can_be_played(CurrentState) orelse is_on_game_started(CurrentState)).
@@ -91,7 +95,7 @@ state_update_current_state(State = #state{current_state=game_started, plays=Play
 	state_set_current_state({game_over, Result}, State).
 
 may_join(NewPlayer, State=#state{}) ->
-	case can_join_player(State) of
+	case can_join_player(NewPlayer, State) of
 		true -> %% @todo: How about to return the events to process? like {joined, player1},{state_changed, from_state, to_state}. 
 			UpdatedState = state_add_player(NewPlayer, State),
 			FinalState = state_update_current_state(UpdatedState),
