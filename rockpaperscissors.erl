@@ -1,6 +1,6 @@
 -module(rockpaperscissors).
 -compile(export_all).
--export([run/0, new/0, may_join/2, may_play/3]).
+-export([get_best_play/2, run/0, new/0, may_join/2, may_play/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -166,7 +166,7 @@ run_command(join, [Player], State) ->
 	{ok, UpdatedState} = may_join(Player, State),
 	UpdatedState;
 run_command(play, [Player, PlayValue], State) ->
-	{ok, UpdatedState} = may_play(Player, PlayValue, State),
+	{ok, UpdatedState} = may_play(Player, list_to_atom(PlayValue), State),
 	UpdatedState;
 run_command(state, _Params, State) ->
 	run_state_command(State),
