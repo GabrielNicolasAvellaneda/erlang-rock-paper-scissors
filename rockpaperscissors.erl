@@ -1,5 +1,6 @@
 -module(rockpaperscissors).
--export([]).
+-compile(export_all).
+-export([new/0, may_join/2, may_play/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -7,8 +8,8 @@
 
 create_play(Player, Played) -> {Player, Played}.
 
-create_player(Id) ->
-	{Id}.
+create_player(PlayerId) ->
+	{PlayerId}.
 
 %get_play(Play) -> element(2, Play). 
 
@@ -46,25 +47,67 @@ is_on_waiting_for_players(CurrentState) ->
 is_on_need_more_players(CurrentState) ->
 	CurrentState =:= need_more_players. 
 
+is_on_game_can_be_played(CurrentState) ->
+	CurrentState =:= game_can_be_played.
+
+is_on_game_started(CurrentState) ->
+	CurrentState =:= game_started.
+
 can_join_player(#state{current_state = CurrentState, players = Players}) ->
 	(not is_players_limit_reached(Players)) andalso (is_on_waiting_for_players(CurrentState) orelse is_on_need_more_players(CurrentState)).
+
+has_player_played(PlayerId, State) ->
+	Plays = state_get_plays(State),
+	lists:keymember(PlayerId, 1, Plays).
+
+can_play(PlayerId, State = #state{current_state = CurrentState}) ->
+	(not has_player_played(PlayerId, State)) andalso (is_on_game_can_be_played(CurrentState) orelse is_on_game_started(CurrentState)).
 
 state_set_current_state(NewCurrentState, State) -> State#state{current_state = NewCurrentState}.
 
 state_get_current_state(State) -> State#state.current_state.
 
+state_get_plays(#state{plays = Plays}) -> Plays.
+
+state_set_plays(Plays, State=#state{}) -> State#state{plays = Plays}.
+
+plays_add(NewPlay, Plays) -> [NewPlay | Plays].
+
+state_add_play(NewPlay, State) ->
+	Plays = state_get_plays(State),
+	UpdatedPlays = plays_add(NewPlay, Plays),
+	state_set_plays(UpdatedPlays, State).
+
 %% @todo more granularity on this.
 state_update_current_state(State = #state{current_state=waiting_for_players, players=Players}) when length(Players) == 1 ->
 	state_set_current_state(need_more_players, State);
 state_update_current_state(State = #state{current_state=need_more_players, players=Players}) when length(Players) == 2 ->
-	state_set_current_state(game_can_be_played, State).
+	state_set_current_state(game_can_be_played, State);
+state_update_current_state(State = #state{current_state=game_can_be_played, plays=Plays}) when length(Plays) == 1 ->
+	state_set_current_state(game_started, State);
+state_update_current_state(State = #state{current_state=game_started, plays=Plays}) when length(Plays) == 2 ->
+	[Play1, Play2] = Plays,
+	Result = check_result(Play1, Play2),
+	state_set_current_state({game_over, Result}, State).
 
 may_join(NewPlayer, State=#state{}) ->
 	case can_join_player(State) of
-		true -> UpdatedState = state_add_player(NewPlayer, State),
+		true -> %% @todo: How about to return the events to process? like {joined, player1},{state_changed, from_state, to_state}. 
+			UpdatedState = state_add_player(NewPlayer, State),
 			FinalState = state_update_current_state(UpdatedState),
 			{ok, FinalState};
-		false -> {error, join_is_not_allowed}
+
+		false -> {join_is_not_allowed, State}
+	end.
+
+may_play(PlayerId, PlayValue, State=#state{}) ->
+	case can_play(PlayerId, State) of
+		true -> Play = create_play(PlayerId, PlayValue),  
+			UpdatedState = state_add_play(Play, State), 
+			FinalState = state_update_current_state(UpdatedState),
+			{ok, FinalState};
+
+		false -> {play_is_not_allowed, State} %% This can be player_already_played, or action_not_alloed.
 	end.
 
 %% Unit tests
@@ -104,5 +147,5 @@ may_join_should_not_bet_allowed_test() ->
 	Players = [create_player(player_1), create_player(player_2)],
 	UpdatedState = state_set_players(Players, State),
 	NewPlayer = create_player(player_3),
-	?assertEqual(may_join(NewPlayer, UpdatedState), {error, join_is_not_allowed}).
+	?assertEqual(may_join(NewPlayer, UpdatedState), {join_is_not_allowed, UpdatedState}).
 
